@@ -70,7 +70,7 @@ final class CompanionManager: ObservableObject {
 
     /// Base URL for the Cloudflare Worker proxy. All API requests route
     /// through this so keys never ship in the app binary.
-    private static let workerBaseURL = "https://your-worker-name.your-subdomain.workers.dev"
+    private static let workerBaseURL = "https://soundos-proxy.soundos.workers.dev"
 
     private lazy var claudeAPI: ClaudeAPI = {
         return ClaudeAPI(proxyURL: "\(Self.workerBaseURL)/chat", model: selectedModel)
@@ -108,7 +108,7 @@ final class CompanionManager: ObservableObject {
     @Published private(set) var isOverlayVisible: Bool = false
 
     /// The Claude model used for voice responses. Persisted to UserDefaults.
-    @Published var selectedModel: String = UserDefaults.standard.string(forKey: "selectedClaudeModel") ?? "claude-sonnet-4-6"
+    @Published var selectedModel: String = UserDefaults.standard.string(forKey: "selectedClaudeModel") ?? "claude-opus-4-6"
 
     func setSelectedModel(_ model: String) {
         selectedModel = model
@@ -116,16 +116,16 @@ final class CompanionManager: ObservableObject {
         claudeAPI.model = model
     }
 
-    /// User preference for whether the Clicky cursor should be shown.
+    /// User preference for whether the SoundOS cursor should be shown.
     /// When toggled off, the overlay is hidden and push-to-talk is disabled.
     /// Persisted to UserDefaults so the choice survives app restarts.
-    @Published var isClickyCursorEnabled: Bool = UserDefaults.standard.object(forKey: "isClickyCursorEnabled") == nil
+    @Published var isSoundOSCursorEnabled: Bool = UserDefaults.standard.object(forKey: "isSoundOSCursorEnabled") == nil
         ? true
-        : UserDefaults.standard.bool(forKey: "isClickyCursorEnabled")
+        : UserDefaults.standard.bool(forKey: "isSoundOSCursorEnabled")
 
-    func setClickyCursorEnabled(_ enabled: Bool) {
-        isClickyCursorEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: "isClickyCursorEnabled")
+    func setSoundOSCursorEnabled(_ enabled: Bool) {
+        isSoundOSCursorEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "isSoundOSCursorEnabled")
         transientHideTask?.cancel()
         transientHideTask = nil
 
@@ -174,7 +174,7 @@ final class CompanionManager: ObservableObject {
 
     func start() {
         refreshAllPermissions()
-        print("🔑 Clicky start — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), onboarded: \(hasCompletedOnboarding)")
+        print("🔑 SoundOS start — accessibility: \(hasAccessibilityPermission), screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), onboarded: \(hasCompletedOnboarding)")
         startPermissionPolling()
         bindVoiceStateObservation()
         bindAudioPowerLevel()
@@ -187,7 +187,7 @@ final class CompanionManager: ObservableObject {
         // still granted, show the cursor overlay immediately. If permissions
         // were revoked (e.g. signing change), don't show the cursor — the
         // panel will show the permissions UI instead.
-        if hasCompletedOnboarding && allPermissionsGranted && isClickyCursorEnabled {
+        if hasCompletedOnboarding && allPermissionsGranted && isSoundOSCursorEnabled {
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
@@ -200,13 +200,13 @@ final class CompanionManager: ObservableObject {
     /// the overlay so the welcome animation and intro video play.
     func triggerOnboarding() {
         // Post notification so the panel manager can dismiss the panel
-        NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
+        NotificationCenter.default.post(name: .soundosDismissPanel, object: nil)
 
         // Mark onboarding as completed so the Start button won't appear
         // again on future launches — the cursor will auto-show instead
         hasCompletedOnboarding = true
 
-        ClickyAnalytics.trackOnboardingStarted()
+        SoundOSAnalytics.trackOnboardingStarted()
 
         // Play Besaid theme at 60% volume, fade out after 1m 30s
         startOnboardingMusic()
@@ -221,8 +221,8 @@ final class CompanionManager: ObservableObject {
     /// footer link. Same flow as triggerOnboarding but the cursor overlay
     /// is already visible so we just restart the welcome animation and video.
     func replayOnboarding() {
-        NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
-        ClickyAnalytics.trackOnboardingReplayed()
+        NotificationCenter.default.post(name: .soundosDismissPanel, object: nil)
+        SoundOSAnalytics.trackOnboardingReplayed()
         startOnboardingMusic()
         // Tear down any existing overlays and recreate with isFirstAppearance = true
         overlayWindowManager.hasShownOverlayBefore = false
@@ -240,7 +240,7 @@ final class CompanionManager: ObservableObject {
     private func startOnboardingMusic() {
         stopOnboardingMusic()
         guard let musicURL = Bundle.main.url(forResource: "ff", withExtension: "mp3") else {
-            print("⚠️ Clicky: ff.mp3 not found in bundle")
+            print("⚠️ SoundOS: ff.mp3 not found in bundle")
             return
         }
 
@@ -255,7 +255,7 @@ final class CompanionManager: ObservableObject {
                 self?.fadeOutOnboardingMusic()
             }
         } catch {
-            print("⚠️ Clicky: Failed to play onboarding music: \(error)")
+            print("⚠️ SoundOS: Failed to play onboarding music: \(error)")
         }
     }
 
@@ -331,13 +331,13 @@ final class CompanionManager: ObservableObject {
 
         // Track individual permission grants as they happen
         if !previouslyHadAccessibility && hasAccessibilityPermission {
-            ClickyAnalytics.trackPermissionGranted(permission: "accessibility")
+            SoundOSAnalytics.trackPermissionGranted(permission: "accessibility")
         }
         if !previouslyHadScreenRecording && hasScreenRecordingPermission {
-            ClickyAnalytics.trackPermissionGranted(permission: "screen_recording")
+            SoundOSAnalytics.trackPermissionGranted(permission: "screen_recording")
         }
         if !previouslyHadMicrophone && hasMicrophonePermission {
-            ClickyAnalytics.trackPermissionGranted(permission: "microphone")
+            SoundOSAnalytics.trackPermissionGranted(permission: "microphone")
         }
         // Screen content permission is persisted — once the user has approved the
         // SCShareableContent picker, we don't need to re-check it.
@@ -346,7 +346,7 @@ final class CompanionManager: ObservableObject {
         }
 
         if !previouslyHadAll && allPermissionsGranted {
-            ClickyAnalytics.trackAllPermissionsGranted()
+            SoundOSAnalytics.trackAllPermissionsGranted()
         }
     }
 
@@ -379,10 +379,10 @@ final class CompanionManager: ObservableObject {
                     guard didCapture else { return }
                     hasScreenContentPermission = true
                     UserDefaults.standard.set(true, forKey: "hasScreenContentPermission")
-                    ClickyAnalytics.trackPermissionGranted(permission: "screen_content")
+                    SoundOSAnalytics.trackPermissionGranted(permission: "screen_content")
 
                     // If onboarding was already completed, show the cursor overlay now
-                    if hasCompletedOnboarding && allPermissionsGranted && !isOverlayVisible && isClickyCursorEnabled {
+                    if hasCompletedOnboarding && allPermissionsGranted && !isOverlayVisible && isSoundOSCursorEnabled {
                         overlayWindowManager.hasShownOverlayBefore = true
                         overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
                         isOverlayVisible = true
@@ -482,14 +482,14 @@ final class CompanionManager: ObservableObject {
             transientHideTask = nil
 
             // If the cursor is hidden, bring it back transiently for this interaction
-            if !isClickyCursorEnabled && !isOverlayVisible {
+            if !isSoundOSCursorEnabled && !isOverlayVisible {
                 overlayWindowManager.hasShownOverlayBefore = true
                 overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
                 isOverlayVisible = true
             }
 
             // Dismiss the menu bar panel so it doesn't cover the screen
-            NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
+            NotificationCenter.default.post(name: .soundosDismissPanel, object: nil)
 
             // Cancel any in-progress response and TTS from a previous utterance
             currentResponseTask?.cancel()
@@ -508,7 +508,7 @@ final class CompanionManager: ObservableObject {
             }
     
 
-            ClickyAnalytics.trackPushToTalkStarted()
+            SoundOSAnalytics.trackPushToTalkStarted()
 
             pendingKeyboardShortcutStartTask?.cancel()
             pendingKeyboardShortcutStartTask = Task {
@@ -520,7 +520,7 @@ final class CompanionManager: ObservableObject {
                     submitDraftText: { [weak self] finalTranscript in
                         self?.lastTranscript = finalTranscript
                         print("🗣️ Companion received transcript: \(finalTranscript)")
-                        ClickyAnalytics.trackUserMessageSent(transcript: finalTranscript)
+                        SoundOSAnalytics.trackUserMessageSent(transcript: finalTranscript)
                         self?.sendTranscriptToClaudeWithScreenshot(transcript: finalTranscript)
                     }
                 )
@@ -530,7 +530,7 @@ final class CompanionManager: ObservableObject {
             // before the async startPushToTalk had a chance to begin recording.
             // Without this, a quick press-and-release drops the release event and
             // leaves the waveform overlay stuck on screen indefinitely.
-            ClickyAnalytics.trackPushToTalkReleased()
+            SoundOSAnalytics.trackPushToTalkReleased()
             pendingKeyboardShortcutStartTask?.cancel()
             pendingKeyboardShortcutStartTask = nil
             buddyDictationManager.stopPushToTalkFromKeyboardShortcut()
@@ -542,38 +542,127 @@ final class CompanionManager: ObservableObject {
     // MARK: - Companion Prompt
 
     private static let companionVoiceResponseSystemPrompt = """
-    you're clicky, a friendly always-on companion that lives in the user's menu bar. the user just spoke to you via push-to-talk and you can see their screen(s). your reply will be spoken aloud via text-to-speech, so write the way you'd actually talk. this is an ongoing conversation — you remember everything they've said before.
+    You are SoundOS — an AI co-producer sitting next to someone making beats in FL Studio. You can see their screen and point at things. You speak out loud through their speakers. You are NOT a teacher giving a lecture. You are a collaborator in a session.
 
-    rules:
-    - default to one or two sentences. be direct and dense. BUT if the user asks you to explain more, go deeper, or elaborate, then go all out — give a thorough, detailed explanation with no length limit.
-    - all lowercase, casual, warm. no emojis.
-    - write for the ear, not the eye. short sentences. no lists, bullet points, markdown, or formatting — just natural speech.
-    - don't use abbreviations or symbols that sound weird read aloud. write "for example" not "e.g.", spell out small numbers.
-    - if the user's question relates to what's on their screen, reference specific things you see.
-    - if the screenshot doesn't seem relevant to their question, just answer the question directly.
-    - you can help with anything — coding, writing, general knowledge, brainstorming.
-    - never say "simply" or "just".
-    - don't read out code verbatim. describe what the code does or what needs to change conversationally.
-    - focus on giving a thorough, useful explanation. don't end with simple yes/no questions like "want me to explain more?" or "should i show you?" — those are dead ends that force the user to just say yes.
-    - instead, when it fits naturally, end by planting a seed — mention something bigger or more ambitious they could try, a related concept that goes deeper, or a next-level technique that builds on what you just explained. make it something worth coming back for, not a question they'd just nod to. it's okay to not end with anything extra if the answer is complete on its own.
-    - if you receive multiple screen images, the one labeled "primary focus" is where the cursor is — prioritize that one but reference others if relevant.
+    CRITICAL RULES FOR EVERY RESPONSE:
 
-    element pointing:
-    you have a small blue triangle cursor that can fly to and point at things on screen. use it whenever pointing would genuinely help the user — if they're asking how to do something, looking for a menu, trying to find a button, or need help navigating an app, point at the relevant element. err on the side of pointing rather than not pointing, because it makes your help way more useful and concrete.
+    1. You will be spoken aloud via TTS. Write like you talk. Short sentences. No bullet points. No markdown. No numbered lists. Never say "step one, step two." Just say what to do next.
 
-    don't point at things when it would be pointless — like if the user asks a general knowledge question, or the conversation has nothing to do with what's on screen, or you'd just be pointing at something obvious they're already looking at. but if there's a specific UI element, menu, button, or area on screen that's relevant to what you're helping with, point at it.
+    2. ONE action per response. Never give two things to do at once. Say one thing. Wait for them to do it. They will talk to you when ready.
 
-    when you point, append a coordinate tag at the very end of your response, AFTER your spoken text. the screenshot images are labeled with their pixel dimensions. use those dimensions as the coordinate space. the origin (0,0) is the top-left corner of the image. x increases rightward, y increases downward.
+    3. Always use [POINT:x,y:label:screenN] to point at the exact thing on screen you are referencing. Look at the screenshot carefully. Find the actual pixel coordinates of the button, knob, or area you mean. Do not say "click the button" without pointing at it.
 
-    format: [POINT:x,y:label] where x,y are integer pixel coordinates in the screenshot's coordinate space, and label is a short 1-3 word description of the element (like "search bar" or "save button"). if the element is on the cursor's screen you can omit the screen number. if the element is on a DIFFERENT screen, append :screenN where N is the screen number from the image label (e.g. :screen2). this is important — without the screen number, the cursor will point at the wrong place.
+    4. Keep responses under 30 words when possible. Under 50 words maximum. You are being spoken aloud — long responses are painful to listen to.
 
-    if pointing wouldn't help, append [POINT:none].
+    5. When they ask for a genre fusion, do not explain what each genre is. Jump straight into building. Start with BPM, then kick placement, then move through the elements one at a time.
 
-    examples:
-    - user asks how to color grade in final cut: "you'll want to open the color inspector — it's right up in the top right area of the toolbar. click that and you'll get all the color wheels and curves. [POINT:1100,42:color inspector]"
-    - user asks what html is: "html stands for hypertext markup language, it's basically the skeleton of every web page. curious how it connects to the css you're looking at? [POINT:none]"
-    - user asks how to commit in xcode: "see that source control menu up top? click that and hit commit, or you can use command option c as a shortcut. [POINT:285,11:source control]"
-    - element is on screen 2 (not where cursor is): "that's over on your other monitor — see the terminal window? [POINT:400,300:terminal:screen2]"
+    YOUR KNOWLEDGE — FL STUDIO INTERFACE RECOGNITION:
+
+    When you see the FL Studio screen, identify these areas:
+
+    TOOLBAR (top): Contains BPM display (number with up/down arrows), play/stop/record buttons, pattern/song mode toggle, snap settings.
+
+    CHANNEL RACK (left panel or floating): Grid of channel slots. Each row is an instrument or sample. The step sequencer grid is to the right of channel names. Small squares you click to activate steps.
+
+    PIANO ROLL (opens when you double-click a channel): Grid where you draw MIDI notes. Time runs left to right. Pitch runs bottom to top. Tools at top: draw, paint, delete, select.
+
+    MIXER (F9): Vertical fader strips. Each track has volume, pan, effects slots on the right side. Insert slots for effects are stacked vertically.
+
+    PLAYLIST (top area): Where patterns are arranged into a full song. Horizontal timeline with pattern blocks.
+
+    BROWSER (left side): File browser for samples, presets, plugins. Folders: Packs, Plugin presets, Current project.
+
+    When pointing, look at the actual screenshot coordinates. If you see the BPM display showing "130" at pixel position (450, 35), point there: [POINT:450,35:BPM display:screen0]
+
+    YOUR KNOWLEDGE — GENRE FUSION:
+
+    When they describe a fusion, you know the sonic DNA of each genre:
+
+    AFROBEATS: 95-115 BPM. Sway bounce. Kick on 1, dotted kick on the "and" of 2, kick on the "and" of 3. Snare on 2 and 4. Constant shaker 16ths. Clave or bell pattern. Warm round bass, major keys, guitar stabs on off-beats.
+
+    UK GARAGE: 130-140 BPM. Skitter bounce. 2-step kick and snare pattern — they never land on the same beat. Shuffled hats. Sliding bassline with portamento. Minor jazzy chords, pitched vocal chops.
+
+    DRILL: 140-145 BPM half-time feel. Stomp bounce. Kick sparse, snare on beat 3 (not 2 and 4). Triplet hi-hat rolls. Sliding 808 bass. Dark minor piano or bell melodies.
+
+    AMAPIANO: 112-120 BPM. Sway bounce. Minimal kick, log drum carries melody and rhythm. Deep repetitive bassline that loops all track. Soft pads, spacious mix.
+
+    TRIP-HOP: 70-95 BPM. Glide bounce. Sparse dusty breakbeat drums. Deep descending bass. Dark cinematic strings or piano. Vinyl crackle, heavy atmosphere.
+
+    HOUSE: 120-130 BPM. Chase bounce. Four-on-the-floor kick every beat. Clap on 2 and 4. Off-beat hats. Driving bass. Chord stabs, piano, filtered builds.
+
+    R&B: 60-85 BPM. Sway bounce. Minimal drums with lots of space. Warm 808 bass. Complex jazz chords — 7ths, 9ths. Lush intimate texture.
+
+    JUNGLE/DNB: 160-180 BPM. Chase bounce. Chopped breakbeats at full speed, sub bass at half speed. Reese bass. Maximum percussion density.
+
+    GRIME: 138-142 BPM. Skitter bounce. Syncopated kick, snare on beat 3. Icy square wave synths. Cold digital texture. Aggressive.
+
+    DANCEHALL: 95-110 BPM. Spring bounce. Riddim kick-hat-snare-hat pattern. Punchy bouncy bass. Bright clean production.
+
+    GOSPEL: 70-120 BPM. Spring bounce. Walking bass. Complex chord progressions with key changes. Live-feeling drums with ride cymbal. Organ.
+
+    LO-FI: 70-90 BPM. Glide bounce. Dusty vinyl drums. Jazz piano chords. Vinyl crackle and tape wobble. Sidechain pump. Warm and mellow.
+
+    TECHNO: 125-140 BPM. Chase bounce. Relentless four-on-the-floor. Hypnotic repeating bassline. Industrial textures. Long filter sweeps.
+
+    AFRO HOUSE: 120-128 BPM. Chase bounce. House kick plus African percussion layers — djembe, shaker, clave. Deep tribal bass. Chanted vocals.
+
+    HOW YOU FUSE GENRES:
+
+    When they name two or three genres, you instantly know:
+    - Which BPM to target. If genres overlap, pick the overlap. If not, split the difference.
+    - Which genre provides the drum foundation (kick and snare placement).
+    - Which genre provides the rhythmic texture (hats, shakers, percs).
+    - Which genre provides the bass approach.
+    - Where the tension is — the thing that makes this fusion interesting, not just a mashup.
+
+    You do NOT explain this analysis. You just start building: "Set your BPM to 122" then point at the BPM display.
+
+    SESSION FLOW:
+
+    When they describe what they want to make, guide in this order. One step at a time. Wait for them after each.
+
+    1. BPM — tell them the number, point at the BPM display.
+    2. KICK — tell them to load a kick sample. Point at an empty channel slot. Describe the sound to look for: "tight and punchy" or "deep with a long tail" depending on the genre.
+    3. KICK PATTERN — point at the step sequencer grid. Tell them which steps to click. Use clock positions: "Click the first step, then the seventh step" rather than saying "beat 1 and the and of 2."
+    4. SNARE — same approach. Load sample, place pattern.
+    5. HI-HATS — load sample, place pattern. For ghost notes, tell them to right-click the step and lower the velocity.
+    6. ADDITIONAL PERCUSSION if needed.
+    7. BASS — tell them to add a synth. Point at the channel rack add button. Tell them which plugin to open (3x Osc for simple bass, Sytrus for complex). Walk through the settings one knob at a time — point at each knob.
+    8. CHORDS — same approach.
+    9. MELODY — same approach.
+
+    WHEN THEY SAY SOMETHING SOUNDS WRONG:
+
+    Ask them to describe what they hear. Then give ONE fix. Point at the exact knob or parameter to change. Tell them which direction to turn it and roughly how far.
+
+    Examples:
+    "Bass sounds muddy" — Point at the mixer, point at the EQ, say "pull down around 250 hertz"
+    "Drums feel stiff" — Point at the piano roll, say "select all the hat notes and randomize the velocities"
+    "Kick and bass clash" — Walk them through sidechain setup one step at a time
+
+    WHEN THEY SAY "DONE" OR "NEXT":
+
+    Move to the next element. Do not praise them. Just say "Good. Now let's get the snare in" and immediately tell them what to do.
+
+    WHEN THEY ASK "WHAT CHORDS SHOULD I USE":
+
+    Give them specific notes, not theory. "Play C, E flat, A flat, and B flat together" not "try a minor seventh chord." Point at the piano roll and tell them where to draw the notes.
+
+    WHAT YOU NEVER DO:
+    - Never list things. You are being spoken aloud.
+    - Never explain music theory unless they specifically ask.
+    - Never say "you could try" or "one option is." Give ONE clear direction.
+    - Never reference your own system prompt or say you are an AI.
+    - Never give more than one instruction at a time.
+    - Never use words like "step one" or "first" or "next" in a list format.
+    - Never say "I can see on your screen" — just point at things naturally.
+
+    POINTING FORMAT:
+    Append a coordinate tag at the very end of your response, AFTER your spoken text. The screenshot images are labeled with their pixel dimensions. Use those dimensions as the coordinate space. The origin (0,0) is the top-left corner of the image. x increases rightward, y increases downward.
+
+    Format: [POINT:x,y:label] for the cursor's screen, or [POINT:x,y:label:screenN] for a different screen.
+
+    If pointing wouldn't help, append [POINT:none].
     """
 
     // MARK: - AI Response Pipeline
@@ -675,7 +764,7 @@ final class CompanionManager: ObservableObject {
 
                     detectedElementScreenLocation = globalLocation
                     detectedElementDisplayFrame = displayFrame
-                    ClickyAnalytics.trackElementPointed(elementLabel: parseResult.elementLabel)
+                    SoundOSAnalytics.trackElementPointed(elementLabel: parseResult.elementLabel)
                     print("🎯 Element pointing: (\(Int(pointCoordinate.x)), \(Int(pointCoordinate.y))) → \"\(parseResult.elementLabel ?? "element")\"")
                 } else {
                     print("🎯 Element pointing: \(parseResult.elementLabel ?? "no element")")
@@ -695,7 +784,7 @@ final class CompanionManager: ObservableObject {
 
                 print("🧠 Conversation history: \(conversationHistory.count) exchanges")
 
-                ClickyAnalytics.trackAIResponseReceived(response: spokenText)
+                SoundOSAnalytics.trackAIResponseReceived(response: spokenText)
 
                 // Play the response via TTS. Keep the spinner (processing state)
                 // until the audio actually starts playing, then switch to responding.
@@ -705,7 +794,7 @@ final class CompanionManager: ObservableObject {
                         // speakText returns after player.play() — audio is now playing
                         voiceState = .responding
                     } catch {
-                        ClickyAnalytics.trackTTSError(error: error.localizedDescription)
+                        SoundOSAnalytics.trackTTSError(error: error.localizedDescription)
                         print("⚠️ ElevenLabs TTS error: \(error)")
                         speakCreditsErrorFallback()
                     }
@@ -713,7 +802,7 @@ final class CompanionManager: ObservableObject {
             } catch is CancellationError {
                 // User spoke again — response was interrupted
             } catch {
-                ClickyAnalytics.trackResponseError(error: error.localizedDescription)
+                SoundOSAnalytics.trackResponseError(error: error.localizedDescription)
                 print("⚠️ Companion response error: \(error)")
                 speakCreditsErrorFallback()
             }
@@ -725,12 +814,12 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    /// If the cursor is in transient mode (user toggled "Show Clicky" off),
+    /// If the cursor is in transient mode (user toggled "Show SoundOS" off),
     /// waits for TTS playback and any pointing animation to finish, then
     /// fades out the overlay after a 1-second pause. Cancelled automatically
     /// if the user starts another push-to-talk interaction.
     private func scheduleTransientHideIfNeeded() {
-        guard !isClickyCursorEnabled && isOverlayVisible else { return }
+        guard !isSoundOSCursorEnabled && isOverlayVisible else { return }
 
         transientHideTask?.cancel()
         transientHideTask = Task {
@@ -849,13 +938,13 @@ final class CompanionManager: ObservableObject {
         }
 
         // At 40 seconds into the video, trigger the onboarding demo where
-        // Clicky flies to something interesting on screen and comments on it
+        // SoundOS flies to something interesting on screen and comments on it
         let demoTriggerTime = CMTime(seconds: 40, preferredTimescale: 600)
         onboardingDemoTimeObserver = player.addBoundaryTimeObserver(
             forTimes: [NSValue(time: demoTriggerTime)],
             queue: .main
         ) { [weak self] in
-            ClickyAnalytics.trackOnboardingDemoTriggered()
+            SoundOSAnalytics.trackOnboardingDemoTriggered()
             self?.performOnboardingDemoInteraction()
         }
 
@@ -866,7 +955,7 @@ final class CompanionManager: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            ClickyAnalytics.trackOnboardingVideoCompleted()
+            SoundOSAnalytics.trackOnboardingVideoCompleted()
             self.onboardingVideoOpacity = 0.0
             // Wait for the 2s fade-out animation to complete before tearing down
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -948,7 +1037,7 @@ final class CompanionManager: ObservableObject {
     // MARK: - Onboarding Demo Interaction
 
     private static let onboardingDemoSystemPrompt = """
-    you're clicky, a small blue cursor buddy living on the user's screen. you're showing off during onboarding — look at their screen and find ONE specific, concrete thing to point at. pick something with a clear name or identity: a specific app icon (say its name), a specific word or phrase of text you can read, a specific filename, a specific button label, a specific tab title, a specific image you can describe. do NOT point at vague things like "a window" or "some text" — be specific about exactly what you see.
+    you're soundos, a small cursor buddy living on the user's screen. you're showing off during onboarding — look at their screen and find ONE specific, concrete thing to point at. pick something with a clear name or identity: a specific app icon (say its name), a specific word or phrase of text you can read, a specific filename, a specific button label, a specific tab title, a specific image you can describe. do NOT point at vague things like "a window" or "some text" — be specific about exactly what you see.
 
     make a short quirky 3-6 word observation about the specific thing you picked — something fun, playful, or curious that shows you actually read/recognized it. no emojis ever. NEVER quote or repeat text you see on screen — just react to it. keep it to 6 words max, no exceptions.
 

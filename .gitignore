@@ -6,3 +6,5 @@ build/
 releases/
 .claude/
 coding-plans/
+config.bat
+node_modules
