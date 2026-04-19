@@ -138,10 +138,11 @@ enum DS {
 
         // ── Overlay Cursor ───────────────────────────────────────────
 
-        /// The blue cursor/bubble color used in OverlayWindow.
+        /// The cursor/bubble color used in OverlayWindow.
         /// Kept distinct from the accent since it serves a different purpose
-        /// (screen overlay vs in-app UI).
-        static let overlayCursorBlue = Color(hex: "#3380FF")
+        /// (screen overlay vs in-app UI). SoundOS uses a bright lime-green (#C8F135)
+        /// so the cursor pops on any background.
+        static let overlayCursorBlue = Color(hex: "#C8F135")
 
         // ── Floating Button Gradient ─────────────────────────────────
 
